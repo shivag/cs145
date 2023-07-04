@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Big Sort Animation</title>
+    <!-- Include the CSS -->
+    <link rel="stylesheet" href="big-sort-animation.css" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 10px;
+      }
+      #informationContainer {
+        border: 2px solid lightblue; /* Adjust color as needed */
+        margin: 10px 0;
+        border-radius: 5px;
+        display: inline-block; /* Make the box fit the content */
+
+      }
+      #informationContainer h2 {
+        color: lightblack; /* Adjust color as needed */
+      }
+      #informationContainer p, ol {
+        line-height: 1.2;
+      }
+    </style>    </style>
+  </head>
+  <body>
+
+    <div id="informationContainer">
+      <h2>BigSort</h2>
+      <p> Goal: Sorting a list of values that fit in RAM is easy. Here we study BigSort, where the list of values do not fit in RAM. The algorithm needs to read/write these values from disk.  
+      <p>Input: Table with 400 rows (values) in 58 pages (with 7 rows per page). Constraint: RAM can fit B=4 pages (out of 58 pages) at a time</p>
+      <p>Output: Sorted table of 58 pages with 7 rows per page</p>
+      <p> <b> Algorithm </b>
+      <ol><li> <b>Split</b> big file into many small files of B pages each</li>
+      <li> <b>Sort</b> each small file (in RAM). Write sorted output below.</li>
+      <li> <b>Merge</b> B sorted files into bigger files. <b>Repeat</b> until done.</li></ol>
+      <p> <b> Notice: </b> Only B*7 = 28 rows fit in RAM, and written to output at a time. (Minor detail for the keen eyed: we need a little bit of extra space to write.)
+    </div>
+
+    <!-- An div to render the chart -->
+    <div id="animationContainer"></div>
+    <!-- Include JS -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="big-sort-animation.js"></script>
+    <!-- Initialize the chart -->
+    <script>
+      bigSortAnimation(document.getElementById("animationContainer"));
+    </script>
+  </body>
+</html>

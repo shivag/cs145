@@ -1,0 +1,79 @@
+.bsa > * + * {
+  margin-top: 1rem;
+}
+
+.bsa .steppers {
+  display: flex;
+  flex-wrap: wrap;
+  --color-primary: #333;
+  --color-bg: #fff;
+}
+
+.bsa .stepper .stepper-input {
+  position: absolute;
+  clip: rect(0, 0, 0, 0);
+  pointer-events: none;
+}
+
+.bsa .stepper .stepper-label {
+  display: inline-block;
+  font-size: 1rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  background-color: var(--color-bg);
+  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out;
+}
+
+.bsa .stepper :checked + .stepper-label {
+  color: var(--color-bg);
+  background-color: var(--color-primary);
+}
+
+.bsa .stepper:not(:first-child) .stepper-label {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.bsa .stepper:not(:last-child) .stepper-label {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.bsa .chart {
+  --color-step-label: #333;
+  --color-column-label: #333;
+  --color-column-border: #999;
+  --color-cell-label: #666;
+}
+
+.bsa .chart-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.bsa .step-label {
+  fill: var(--color-step-label);
+  font-size: 14px;
+}
+
+.bsa .cell-label {
+  fill: var(--color-cell-label);
+  font-size: 8px;
+}
+
+.bsa .col-label {
+  fill: var(--color-column-label);
+  font-size: 10px;
+}
+
+.bsa .col-rect {
+  stroke: var(--color-column-border);
+  fill: none;
+}
