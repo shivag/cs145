@@ -9,11 +9,11 @@
     <style>
       body {
         font-family: Arial, sans-serif;
-        font-size: 10px;
+        font-size: 11px;
       }
       #informationContainer {
-        border: 2px solid lightblue; /* Adjust color as needed */
-        margin: 10px 0;
+        border: 6px solid lightblue; /* Adjust color as needed */
+        margin: 30px 10px;
         border-radius: 5px;
         display: inline-block; /* Make the box fit the content */
 
@@ -30,8 +30,9 @@
 
     <div id="informationContainer">
       <h2>BigSort</h2>
-      <p> Goal: Sorting a list of values that fit in RAM is easy. Here we study BigSort, where the list of values do not fit in RAM. The algorithm needs to read/write these values from disk.  
-      <p>Input: Table with 400 rows (values) in 58 pages (with 7 rows per page). Constraint: RAM can fit B=4 pages (out of 58 pages) at a time</p>
+      <p> Goal: Sorting a list of N values when they all fit in RAM is easy. Here we study BigSort for a list of N values, when only m (<< N) values fit in RAM.The values are stored in 'M' disk pages. Each page has upto `k' values.  
+      <p> Why does it matter? In big data problems, we often want to sort 100s of GBs to Terabytes and Petabytes of data, with only Gigabytes of RAM. BigSort is a fundamental building block for efficiently working with big data.
+      <p>Example Input: Table with 400 values (data rows). These are stored in 58 pages with 7 rows per page. Constraint: RAM can fit B=4 pages (out of 58 pages) at a time</p>
       <p>Output: Sorted table of 58 pages with 7 rows per page</p>
       <p> <b> Algorithm </b>
       <ol><li> <b>Split</b> big file into many small files of B pages each</li>

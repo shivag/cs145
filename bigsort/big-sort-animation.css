@@ -48,7 +48,7 @@
 .bsa .chart {
   --color-step-label: #333;
   --color-column-label: #333;
-  --color-column-border: #E00;
+  --color-column-border: #000;
   --color-cell-label: #666;
 }
 
