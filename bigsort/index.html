@@ -38,7 +38,10 @@
       <ol><li> <b>Split</b> big file into many small files of B pages each</li>
       <li> <b>Sort</b> each small file (in RAM). Write sorted output below.</li>
       <li> <b>Merge</b> B sorted files into bigger files. <b>Repeat</b> until done.</li></ol>
-      <p> <b> Notice: </b> Only B*7 = 28 rows fit in RAM, and written to output at a time. (Minor detail for the keen eyed: we need a little bit of extra space to write.)
+      <p> <b> Notice: </b>
+<ol>
+<li> We use light blue for small values and dark blues for big values, to make it easy to follow along. For example, notice the input table has a mix of light and dark blues in random spots. The final sorted output has the values organized from light to dark. </li>
+<li>Only B*7 = 28 rows fit in RAM, and written to output at a time. (Minor detail for the keen eyed: we need a little bit of extra space to write.)</li></ol>
     </div>
 
     <!-- An div to render the chart -->
