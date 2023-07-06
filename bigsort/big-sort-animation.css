@@ -48,8 +48,8 @@
 .bsa .chart {
   --color-step-label: #333;
   --color-column-label: #333;
-  --color-column-border: #ddd;
-  --color-cell-label: #222;
+  --color-column-border: #aaa;
+  --color-cell-label: #333;
 }
 
 .bsa .chart-svg {
@@ -65,7 +65,7 @@
 
 .bsa .cell-label {
   fill: var(--color-cell-label);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .bsa .col-label {
