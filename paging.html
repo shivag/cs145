@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Hierarchy Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/umd/lucide.min.js"></script>
+    <style>
+        body {
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .copy-box {
+            height: 60px;
+            font-size: 0.75rem;
+            line-height: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="flex flex-col items-center justify-center min-h-screen">
+
+    <div id="app" class="p-6 w-full max-w-2xl bg-white rounded-xl shadow-lg space-y-4"></div>
+
+    <script>
+        const TOTAL_PAGES = 40;
+        const RAM_SIZE = 4;
+        const L2_CACHE_SIZE = 2;
+        const RAM_SPEED = 100;  // 100 cycles per RAM access
+        const SSD_SPEED = 100000;  // 100,000 cycles per SSD access
+        const L2_SPEED = 10;  // 10 cycles per L2 cache access
+
+        let ramPages = [];
+        let l2Cache = [];
+        let cpuRequest = null;
+        let stats = {
+            totalCycles: 0,
+            idleCycles: 0,
+            pagesRequested: 0,
+            ramHits: 0,
+            l2Hits: 0
+        };
+        let speed = 100;
+        let waitCycles = 0;
+        let isWaiting = false;
+        let currentRequest = null;
+        let requestSource = null;
+        let copyProgress = 0;
+
+        const speedOptions = [
+            { label: '10x', value: 10 },
+            { label: '100x', value: 100 },
+            { label: '100,000x', value: 100000 }
+        ];
+
+        function simulateStep() {
+            if (isWaiting) {
+                if (waitCycles > 0) {
+                    const cyclesProcessed = Math.min(waitCycles, speed);
+                    waitCycles -= cyclesProcessed;
+                    stats.totalCycles += cyclesProcessed;
+                    stats.idleCycles += cyclesProcessed - 1; // CPU is busy for 1 cycle, idle for the rest
+                    copyProgress = 100 - (waitCycles / (requestSource === 'L2' ? L2_SPEED : requestSource === 'RAM' ? RAM_SPEED : SSD_SPEED)) * 100;
+                } else {
+                    isWaiting = false;
+                    if (requestSource === 'SSD') {
+                        if (ramPages.length >= RAM_SIZE) {
+                            const evictedIndex = Math.floor(Math.random() * RAM_SIZE);
+                            ramPages[evictedIndex] = currentRequest;
+                        } else {
+                            ramPages.push(currentRequest);
+                        }
+                    }
+                    if (requestSource === 'RAM' || requestSource === 'SSD') {
+                        if (l2Cache.length >= L2_CACHE_SIZE) {
+                            l2Cache.shift();
+                        }
+                        l2Cache.push(currentRequest);
+                    }
+                    currentRequest = null;
+                    requestSource = null;
+                    copyProgress = 0;
+                }
+            } else {
+                const newRequest = Math.floor(Math.random() * TOTAL_PAGES);
+                cpuRequest = newRequest;
+                currentRequest = newRequest;
+                stats.pagesRequested++;
+
+                if (l2Cache.includes(newRequest)) {
+                    stats.l2Hits++;
+                    waitCycles = L2_SPEED;
+                    requestSource = 'L2';
+                } else if (ramPages.includes(newRequest)) {
+                    stats.ramHits++;
+                    waitCycles = RAM_SPEED;
+                    requestSource = 'RAM';
+                } else {
+                    waitCycles = SSD_SPEED;
+                    requestSource = 'SSD';
+                }
+                isWaiting = true;
+                stats.totalCycles += 1; // CPU is busy for 1 cycle when initiating a request
+                copyProgress = 0;
+            }
+
+            render();
+        }
+
+        function getCPUIdlePercentage() {
+            if (stats.totalCycles === 0) return 100;
+            return (stats.idleCycles / stats.totalCycles) * 100;
+        }
+
+        function formatCycles(cycles) {
+            if (cycles >= 1e6) return (cycles / 1e6).toFixed(2) + 'M';
+            if (cycles >= 1e3) return (cycles / 1e3).toFixed(2) + 'K';
+            return cycles.toString();
+        }
+
+        function MemoryComponent(label, pages, size) {
+            return `
+                <div class="border p-2 rounded-lg shadow-md bg-white">
+                    <h3 class="font-semibold text-sm mb-1">${label}</h3>
+                    <div class="grid grid-cols-4 gap-1">
+                        ${Array(size).fill(null).map((_, index) => `
+                            <div 
+                                class="w-8 h-8 flex items-center justify-center border rounded-full text-xs font-medium
+                                    ${pages[index] !== undefined 
+                                        ? 'bg-blue-200 border-blue-300 text-blue-800' 
+                                        : 'bg-gray-100 border-gray-200 text-gray-400'}
+                                    ${pages[index] === cpuRequest ? 'ring-2 ring-purple-500' : ''}"
+                            >
+                                ${pages[index] !== undefined ? pages[index] : '-'}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function SSDComponent(totalPages, ramPages) {
+            return `
+                <div class="border p-2 rounded-lg shadow-md bg-white">
+                    <h3 class="font-semibold text-sm mb-1">SSD (${totalPages} pages)</h3>
+                    <div class="grid grid-cols-10 gap-1">
+                        ${Array(totalPages).fill(null).map((_, index) => `
+                            <div 
+                                class="w-5 h-5 flex items-center justify-center text-xs border rounded font-medium
+                                    ${ramPages.includes(index) ? 'bg-blue-200 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-200 text-gray-600'}
+                                    ${index === cpuRequest ? 'ring-1 ring-purple-500' : ''}"
+                            >
+                                ${index}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function CopyingComponent(source, destination) {
+            if (source === 'RAM' && destination === 'CPU' && (!isWaiting || requestSource !== 'RAM')) {
+                return `<div class="copy-box">&nbsp;</div>`;
+            }
+            return `
+                <div class="copy-box bg-purple-100 text-purple-800 px-2 rounded text-xs font-semibold border-2 border-purple-300 w-full">
+                    ${currentRequest !== null ? `
+                        Copying Page ${currentRequest}<br>
+                        ${source} to ${destination}<br>
+                        ${speed === 10 && source === 'RAM' ? '10' : copyProgress.toFixed(1)}% copied
+                    ` : '&nbsp;'}
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Memory Hierarchy Simulation</h2>
+                    <div class="text-lg font-semibold text-blue-600">${formatCycles(stats.totalCycles)} cycles</div>
+                </div>
+                
+                <div class="flex gap-4">
+                    <div class="w-1/2">
+                        <div class="flex flex-col items-center space-y-2 mb-4 relative">
+                            <div class="text-center font-semibold bg-gray-100 w-full py-1 rounded">
+                                CPU ${cpuRequest !== null ? `
+                                    <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm font-bold">
+                                        Requesting Page ${cpuRequest}
+                                    </span>
+                                ` : ''}
+                            </div>
+                            <div class="text-center font-semibold bg-gray-100 w-full py-1 rounded">
+                                L2 Cache ${MemoryComponent("", l2Cache, L2_CACHE_SIZE)}
+                            </div>
+                            <i data-lucide="arrow-down" class="h-6 w-6 text-blue-500"></i>
+                            ${CopyingComponent('RAM', 'CPU')}
+                            ${MemoryComponent("RAM (4 pages)", ramPages, RAM_SIZE)}
+                            <i data-lucide="arrow-down" class="h-6 w-6 text-blue-500"></i>
+                            ${CopyingComponent('SSD', 'RAM')}
+                            ${SSDComponent(TOTAL_PAGES, ramPages)}
+                        </div>
+                    </div>
+                    <div class="w-1/2 bg-gray-100 p-4 rounded-lg space-y-3">
+                        <h3 class="font-semibold text-lg mb-2">Stats</h3>
+                        <div class="grid grid-cols-2 gap-3 text-sm">
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <div class="font-medium text-gray-600">CPU Idle</div>
+                                <div class="text-lg font-bold text-blue-600">${getCPUIdlePercentage().toFixed(2)}%</div>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <div class="font-medium text-gray-600">Total Cycles</div>
+                                <div class="text-lg font-bold text-blue-600">${formatCycles(stats.totalCycles)}</div>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <div class="font-medium text-gray-600">Pages Requested</div>
+                                <div class="text-lg font-bold text-blue-600">${stats.pagesRequested.toLocaleString()}</div>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <div class="font-medium text-gray-600">RAM Hits</div>
+                                <div class="text-lg font-bold text-blue-600">
+                                    ${stats.ramHits.toLocaleString()} 
+                                    <span class="text-sm font-normal text-gray-500">
+                                        (${stats.pagesRequested > 0 ? ((stats.ramHits / stats.pagesRequested) * 100).toFixed(2) : '0'}%)
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <div class="font-medium text-gray-600">L2 Cache Hits</div>
+                                <div class="text-lg font-bold text-blue-600">
+                                    ${stats.l2Hits.toLocaleString()} 
+                                    <span class="text-sm font-normal text-gray-500">
+                                        (${stats.pagesRequested > 0 ? ((stats.l2Hits / stats.pagesRequested) * 100).toFixed(2) : '0'}%)
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-xs space-y-1 bg-white p-2 rounded">
+                            <div><span class="font-medium">L2 Cache Speed:</span> ${L2_SPEED} cycles</div>
+                            <div><span class="font-medium">RAM Speed:</span> ${RAM_SPEED} cycles</div>
+                            <div><span class="font-medium">SSD Speed:</span> ${SSD_SPEED} cycles</div>
+                            <div><span class="font-medium">Waiting:</span> ${isWaiting ? waitCycles : 'No'} cycles</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center mt-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Simulation Speed: <span class="text-blue-600 font-bold">${speed.toLocaleString()}x</span>
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            ${speedOptions.map(option => `
+                                <button
+                                    onclick="setSpeed(${option.value})"
+                                    class="px-3 py-1 rounded text-sm font-medium transition-colors duration-200
+                                        ${speed === option.value 
+                                            ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
+                                >
+                                    ${option.label}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <button
+                        onclick="restart()"
+                        class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors duration-200"
+                    >
+                        Restart
+                    </button>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        function setSpeed(newSpeed) {
+            speed = newSpeed;
+            render();
+        }
+
+        function restart() {
+            ramPages = [];
+            l2Cache = [];
+            cpuRequest = null;
+            stats = {
+                totalCycles: 0,
+                idleCycles: 0,
+                pagesRequested: 0,
+                ramHits: 0,
+                l2Hits: 0
+            };
+            waitCycles = 0;
+            isWaiting = false;
+            currentRequest = null;
+            requestSource = null;
+            copyProgress = 0;
+            render();
+        }
+
+        setInterval(simulateStep, 500);
+        render();
+    </script>
+
+        <!-- Description Box -->
+        <div class="mt-8 text-sm text-gray-600 max-w-2xl">
+            This shows how paging works in a computer system. At 100x speed, it's from the RAM's POV. At 100,000x speed, it's from the SSD's POV. The CPU requests pages of data, first checking its L2 cache for fast access. If the requested data is not in the L2 cache, it checks RAM. If it's not in RAM either, it fetches the data from a slower SSD. We show some stats on CPU idle time, cache hits and page misses.
+        </div>
+    </div>
+</body>
+</html>
+
