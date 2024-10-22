@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MicroSchedule Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .timeline-chart, .waitsfor-graph {
+            overflow: visible;
+        }
+        .active-tab {
+            background-color: #e5e7eb;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-4 space-y-4">
+        <div class="grid grid-cols-3 gap-4">
+            <!-- Input and Controls -->
+            <div class="col-span-1 space-y-3">
+                <!-- Example Tabs -->
+                <div class="flex space-x-1 border-b">
+                    <button onclick="loadExample('basic')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg active-tab" id="tab-basic">
+                        Basic
+                    </button>
+                    <button onclick="loadExample('deadlock2')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg" id="tab-deadlock2">
+                        Deadlock (2T)
+                    </button>
+                    <button onclick="loadExample('deadlock3')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg" id="tab-deadlock3">
+                        Deadlock (3T)
+                    </button>
+                </div>
+
+                <!-- Speed Control -->
+                <div class="bg-gray-100 p-3 rounded-lg">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Simulation Speed: <span id="speedDisplay">1000</span>ms
+                    </label>
+                    <input type="range" min="100" max="2000" step="100" value="1000" 
+                           onchange="setSpeed(this.value)" class="w-full">
+                </div>
+
+                <!-- Schedule Input -->
+                <div class="bg-gray-100 p-3 rounded-lg">
+                    <textarea id="scheduleInput" rows="8" class="w-full p-2 border rounded text-sm font-mono" placeholder="Enter schedule..."></textarea>
+                    <div class="flex flex-wrap gap-2 mt-2">
+                        <button onclick="updateSimulation()" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
+                            Update
+                        </button>
+                        <button id="playPauseBtn" onclick="togglePlayPause()" class="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600">
+                            Play
+                        </button>
+                        <button onclick="stepForward()" class="px-3 py-1 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600">
+                            Step
+                        </button>
+                        <button onclick="resetSimulation()" class="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Deadlock Status -->
+                <div id="deadlockStatus" class="hidden p-3 rounded-lg bg-red-100 text-red-800 font-medium">
+                    Deadlock Detected!
+                </div>
+            </div>
+            
+            <!-- WaitsFor Graph -->
+            <div class="col-span-2">
+                <div class="bg-white p-3 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold mb-2">WaitsFor Graph</h2>
+                    <div id="waitsForGraph" class="h-48"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Timeline -->
+        <div class="bg-white p-3 rounded-lg shadow">
+            <h2 class="text-lg font-semibold mb-2">Timeline (Current Time: <span id="currentTimeDisplay">0</span>)</h2>
+            <div id="timeline"></div>
+        </div>
+    </div>
+
+    <script>
+    const examples = {
+        basic: `T1,Req(A),1
+T1,Get(A),2
+T1,Rs(A),3
+T3,Req(B),4
+T3,Get(B),5
+T3,Rs(B),6
+T2,Req(A),7
+T1,Re(A),8
+T1,Ws(A),9
+T3,Re(B),11
+T3,Ws(B),12
+T1,We(A),14
+T1,Unl(A),15
+T3,We(B),17
+T3,Req(A),18
+T3,Get(A),19
+T3,Ws(A),20
+T3,We(A),25
+T3,Unl(B),26
+T3,Unl(A),27
+T2,Get(A),27
+T2,Rs(A),28
+T2,Re(A),33
+T2,Unl(A),34`,
+        deadlock2: `T1,Req(A),1
+T1,Get(A),2
+T1,Rs(A),3
+T2,Req(B),4
+T2,Get(B),5
+T2,Rs(B),6
+T1,Req(B),7
+T2,Req(A),8`,
+        deadlock3: `T1,Req(A),1
+T1,Get(A),2
+T1,Req(B),3
+T2,Req(B),4
+T2,Get(B),5
+T2,Req(C),6
+T3,Req(C),7
+T3,Get(C),8
+T3,Req(A),9`
+    };
+
+    let schedule = [];
+    let currentTime = 0;
+    let maxTime = 0;
+    let isPlaying = false;
+    let playInterval;
+    let locks = {};
+    let grantedLocks = {};  // To track the locks that have been acquired
+    let requestedLocks = {}; // Track requested locks for WaitsFor graph
+    let speed = 1000;
+
+    function setSpeed(newSpeed) {
+        speed = parseInt(newSpeed);
+        document.getElementById('speedDisplay').textContent = speed;
+        if (isPlaying) {
+            clearInterval(playInterval);
+            playInterval = setInterval(stepForward, speed);
+        }
+    }
+
+    function parseSchedule(input) {
+        return input.split('\n').map(line => {
+            const [transaction, action, time] = line.split(',');
+            return { transaction, action, time: parseInt(time) };
+        }).sort((a, b) => a.time - b.time);
+    }
+
+    function loadExample(example) {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active-tab');
+        });
+        document.getElementById(`tab-${example}`).classList.add('active-tab');
+        
+        document.getElementById('scheduleInput').value = examples[example];
+        updateSimulation();
+    }
+
+    function updateSimulation() {
+        const input = document.getElementById('scheduleInput').value;
+        schedule = parseSchedule(input);
+        maxTime = Math.max(...schedule.map(d => d.time));
+        resetSimulation();
+    }
+
+    function resetSimulation() {
+        currentTime = 0;
+        locks = {};
+        grantedLocks = {};
+        requestedLocks = {};
+        isPlaying = false;
+        clearInterval(playInterval);
+        document.getElementById('playPauseBtn').textContent = 'Play';
+        document.getElementById('deadlockStatus').classList.add('hidden');
+        document.getElementById('currentTimeDisplay').textContent = currentTime;
+        drawTimeline();
+        drawWaitsForGraph();
+    }
+
+    function togglePlayPause() {
+        isPlaying = !isPlaying;
+        const btn = document.getElementById('playPauseBtn');
+        if (isPlaying) {
+            btn.textContent = 'Pause';
+            playInterval = setInterval(stepForward, speed);
+        } else {
+            btn.textContent = 'Play';
+            clearInterval(playInterval);
+        }
+    }
+
+    function stepForward() {
+        if (currentTime < maxTime) {
+            currentTime++;
+            document.getElementById('currentTimeDisplay').textContent = currentTime;
+            
+            // Process actions at current time
+            let currentActions = schedule.filter(d => d.time === currentTime);
+            currentActions.forEach(action => {
+                const [actionType, variable] = action.action.split('(');
+                const varName = variable.slice(0, -1);
+                
+                if (actionType === 'Req') {
+                    if (!locks[varName]) locks[varName] = [];
+                    locks[varName].push(action.transaction);
+                    
+                    if (!requestedLocks[varName]) requestedLocks[varName] = [];
+                    requestedLocks[varName].push(action.transaction); // Track requested locks
+                } else if (actionType === 'Get') {
+                    if (!grantedLocks[varName]) grantedLocks[varName] = [];
+                    grantedLocks[varName].push(action.transaction);
+                } else if (actionType === 'Unl') {
+                    if (grantedLocks[varName]) {
+                        grantedLocks[varName] = grantedLocks[varName].filter(t => t !== action.transaction);
+                    }
+                    if (locks[varName]) {
+                        locks[varName] = locks[varName].filter(t => t !== action.transaction);
+                    }
+                }
+            });
+
+            // Check for deadlock
+            if (detectDeadlock()) {
+                document.getElementById('deadlockStatus').classList.remove('hidden');
+                isPlaying = false;
+                clearInterval(playInterval);
+                document.getElementById('playPauseBtn').textContent = 'Play';
+            }
+
+            drawTimeline();
+            drawWaitsForGraph();
+        } else {
+            isPlaying = false;
+            clearInterval(playInterval);
+            document.getElementById('playPauseBtn').textContent = 'Play';
+        }
+    }
+
+    function detectDeadlock() {
+        const transactions = [...new Set(schedule.map(d => d.transaction))];
+        const graph = {};
+        transactions.forEach(t => graph[t] = new Set());
+
+        Object.entries(locks).forEach(([variable, waitingTransactions]) => {
+            if (waitingTransactions.length > 1) {
+                for (let i = 1; i < waitingTransactions.length; i++) {
+                    graph[waitingTransactions[i]].add(waitingTransactions[0]);
+                }
+            }
+        });
+
+        function hasCycle(node, visited, recursionStack) {
+            visited.add(node);
+            recursionStack.add(node);
+
+            for (let neighbor of graph[node]) {
+                if (!visited.has(neighbor)) {
+                    if (hasCycle(neighbor, visited, recursionStack)) return true;
+                } else if (recursionStack.has(neighbor)) {
+                    return true;
+                }
+            }
+
+            recursionStack.delete(node);
+            return false;
+        }
+
+        const visited = new Set();
+        const recursionStack = new Set();
+
+        for (let node of transactions) {
+            if (!visited.has(node)) {
+                if (hasCycle(node, visited, recursionStack)) {
+                    console.log("Deadlock detected!");
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function drawTimeline() {
+        const margin = {top: 20, right: 30, bottom: 30, left: 50};
+        const width = 1000 - margin.left - margin.right;
+        const height = 200 - margin.top - margin.bottom;
+
+        d3.select("#timeline").selectAll("*").remove();
+
+        const svg = d3.select("#timeline")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const transactions = [...new Set(schedule.map(d => d.transaction))];
+
+        const x = d3.scaleLinear()
+            .domain([0, maxTime])
+            .range([0, width]);
+
+        const y = d3.scaleBand()
+            .domain(transactions)
+            .range([0, height])
+            .padding(0.4);
+
+        // X-axis
+        svg.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x).ticks(maxTime));
+
+        // Y-axis
+        svg.append("g")
+            .call(d3.axisLeft(y));
+
+        // Action color scale
+        const colorScale = d3.scaleOrdinal()
+            .domain(['Req', 'Get', 'Rs', 'Re', 'Ws', 'We', 'Unl'])
+            .range(['#4CAF50', '#2196F3', '#FFC107', '#FF9800', '#F44336', '#9C27B0', '#607D8B']);
+
+        // Draw actions up to current time
+        const actions = svg.selectAll("g.action")
+            .data(schedule.filter(d => d.time <= currentTime))
+            .enter()
+            .append("g")
+            .attr("class", "action")
+            .attr("transform", d => `translate(${x(d.time)},${y(d.transaction)})`);
+
+        actions.append("rect")
+            .attr("width", 6)
+            .attr("height", y.bandwidth())
+            .attr("fill", d => colorScale(d.action.split('(')[0]));
+
+        actions.append("text")
+            .attr("x", 8)
+            .attr("y", y.bandwidth() / 2)
+            .attr("dy", "-0.2em")
+            .text(d => d.action.split('(')[0])
+            .style("font-size", "9px")
+            .style("font-weight", "bold");
+
+        actions.append("text")
+            .attr("x", 8)
+            .attr("y", y.bandwidth() / 2)
+            .attr("dy", "0.9em")
+            .text(d => d.action.split('(')[1].replace(')', ''))
+            .style("font-size", "9px")
+            .style("fill", "#666");
+
+        // Current time indicator
+        svg.append("line")
+            .attr("x1", x(currentTime))
+            .attr("x2", x(currentTime))
+            .attr("y1", 0)
+            .attr("y2", height)
+            .attr("stroke", "red")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "4,4");
+    }
+
+    function drawWaitsForGraph() {
+        const margin = {top: 10, right: 10, bottom: 10, left: 10};
+        const width = 400 - margin.left - margin.right;
+        const height = 150 - margin.top - margin.bottom;
+
+        d3.select("#waitsForGraph").selectAll("*").remove();
+
+        const svg = d3.select("#waitsForGraph")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const transactions = [...new Set(schedule.map(d => d.transaction))];
+
+        // Set up node positions for 2, 3, or more transactions
+        const nodePositions = {};
+        if (transactions.length === 2) {
+            nodePositions[transactions[0]] = { x: width / 3, y: height / 2 };
+            nodePositions[transactions[1]] = { x: (2 * width) / 3, y: height / 2 };
+        } else if (transactions.length === 3) {
+            nodePositions[transactions[0]] = { x: width / 2, y: height / 4 };
+            nodePositions[transactions[1]] = { x: width / 4, y: (3 * height) / 4 };
+            nodePositions[transactions[2]] = { x: (3 * width) / 4, y: (3 * height) / 4 };
+        } else if (transactions.length >= 4) {
+            // Layout for more than 3 transactions
+            transactions.forEach((t, i) => {
+                nodePositions[t] = { x: width * (i + 1) / (transactions.length + 1), y: height / 2 };
+            });
+        }
+
+        // Define arrow marker
+        svg.append("defs").append("marker")
+            .attr("id", "arrow")
+            .attr("viewBox", "0 -5 10 10")
+            .attr("refX", 20)
+            .attr("refY", 0)
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .attr("orient", "auto")
+            .append("path")
+            .attr("d", "M0,-5L10,0L0,5")
+            .attr("fill", "#999");
+
+        // Draw nodes
+        transactions.forEach(t => {
+            const pos = nodePositions[t];
+            
+            // Node circle
+            svg.append("circle")
+                .attr("cx", pos.x)
+                .attr("cy", pos.y)
+                .attr("r", 15)
+                .attr("fill", "#69b3a2")
+                .attr("stroke", "#457a68")
+                .attr("stroke-width", 2);
+            
+            // Node label
+            svg.append("text")
+                .attr("x", pos.x)
+                .attr("y", pos.y)
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.3em")
+                .text(t)
+                .attr("fill", "white")
+                .style("font-weight", "bold");
+        });
+
+        // Draw edges based on waiting relationships, but only after 'Get'
+        Object.entries(grantedLocks).forEach(([variable, transactionsHoldingLocks]) => {
+            transactionsHoldingLocks.forEach(holder => {
+                locks[variable]?.forEach(waiter => {
+                    if (waiter !== holder && requestedLocks[variable]?.includes(waiter)) { // Only if still waiting
+                        const source = nodePositions[holder];
+                        const target = nodePositions[waiter];
+                        
+                        // Draw arrow from holder to waiter
+                        svg.append("line")
+                            .attr("x1", target.x)
+                            .attr("y1", target.y)
+                            .attr("x2", source.x)
+                            .attr("y2", source.y)
+                            .attr("stroke", "#999")
+                            .attr("stroke-width", 2)
+                            .attr("marker-end", "url(#arrow)");
+
+                        // Add variable label
+                        svg.append("text")
+                            .attr("x", (source.x + target.x) / 2)
+                            .attr("y", (source.y + target.y) / 2 - 10)
+                            .attr("text-anchor", "middle")
+                            .text(variable)
+                            .style("font-size", "12px")
+                            .style("fill", "#666");
+                    }
+                });
+            });
+        });
+    }
+
+    // Initialize simulation with first example
+    loadExample('basic');
+    </script>
+</body>
+</html>
+
