@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Speedtest for cs145</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1rem;
+        }
+        .runner {
+            margin-bottom: 1.5rem;
+        }
+        .runner-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 2rem;
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            position: relative;
+        }
+        .runner-indicator {
+            position: absolute;
+            width: 40px;
+            height: 2rem;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: left 100ms linear;
+        }
+        .runner-indicator::after {
+            content: '▶';
+            color: white;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background-color: #f3f4f6;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
+        .slider-container {
+            margin: 1.5rem 0;
+        }
+        #speedup-slider {
+            width: 100%;
+        }
+        .explanation {
+            margin-top: 2rem;
+            padding: 1rem;
+            background-color: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="text-align: center; font-weight: bold; font-size: 1.5rem;">Speedtest for <a href="https://cs145.stanford.edu"> CS145</a></h2>
+    
+    <div id="runners"></div>
+    
+    <div class="slider-container">
+        <label for="speedup-slider">
+            Speedup Factor: <span id="speedup-value">1.0</span>x
+        </label>
+        <input type="range" id="speedup-slider" min="0.1" max="1000" step="0.1" value="1">
+    </div>
+
+    <table>
+        <caption style="margin-bottom: 0.5rem;">Component Specs (Page Size: 64MB)</caption>
+        <thead>
+            <tr>
+                <th>Component</th>
+                <th>Access Time</th>
+                <th>Transfer (GB/s)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>RAM</td>
+                <td>100 ns</td>
+                <td>100</td>
+            </tr>
+            <tr>
+                <td>SSD</td>
+                <td>10 μs</td>
+                <td>5</td>
+            </tr>
+            <tr>
+                <td>HDD</td>
+                <td>10 ms</td>
+                <td>0.1</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="explanation">
+        This shows time to process 64MB (one page or "block" (in databases)worth of data The CPU processes data at a fixed rate (100ns per page). We list the transfer and access times we use for cs145.stanford.edu
+    </div>
+
+    <script>
+        const MB = 1.0;
+        const PageSizeMB = 64.0 * MB;
+
+        class IOdevice {
+            constructor(accessTime, scanSpeed, C_w) {
+                this.C_r = 1.0;
+                this.C_w = C_w;
+                this.accessTime = accessTime;
+                this.scanSpeed = scanSpeed;
+            }
+
+            readPagesCost(numPages) {
+                numPages = Math.ceil(numPages);
+                let tsecs = numPages * this.accessTime;
+                tsecs += (numPages * PageSizeMB) / this.scanSpeed;
+                return tsecs;
+            }
+
+            writePagesCost(numPages) {
+                return this.C_w * this.readPagesCost(numPages);
+            }
+        }
+
+        class CPU {
+            constructor(clockSpeed, ipc) {
+                this.clockSpeed = clockSpeed;
+                this.ipc = ipc;
+            }
+
+            processPageCost() {
+                return 100e-9;
+            }
+        }
+
+        const ram2024 = new IOdevice(100 * Math.pow(10, -9), 100.0 * 1024, 1.0);
+        const ssd2024 = new IOdevice(10 * Math.pow(10, -6), 5.0 * 1024, 1.0);
+        const hdd2024 = new IOdevice(10 * Math.pow(10, -3), 100.0, 1.0);
+        const cpu2024 = new CPU(3.5, 4);
+
+        const devices = {
+            cpu: { device: cpu2024, color: '#9333ea', label: 'CPU' },
+            ram: { device: ram2024, color: '#3b82f6', label: 'RAM' },
+            ssd: { device: ssd2024, color: '#10b981', label: 'SSD' },
+            hdd: { device: hdd2024, color: '#ef4444', label: 'HDD' }
+        };
+
+        const components = {};
+        Object.keys(devices).forEach(key => {
+            components[key] = { progress: 0, pages: 0 };
+        });
+
+        function createRunner(key, device) {
+            const runnerDiv = document.createElement('div');
+            runnerDiv.className = 'runner';
+            runnerDiv.innerHTML = `
+                <div class="runner-header">
+                    <span>${device.label}</span>
+                    <span>Pages: <span id="${key}-pages">0</span></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="runner-indicator" id="${key}-indicator" 
+                         style="background-color: ${device.color}; left: 0%"></div>
+                </div>
+            `;
+            return runnerDiv;
+        }
+
+        const runnersContainer = document.getElementById('runners');
+        Object.entries(devices).forEach(([key, device]) => {
+            runnersContainer.appendChild(createRunner(key, device));
+        });
+
+        const speedupSlider = document.getElementById('speedup-slider');
+        const speedupValue = document.getElementById('speedup-value');
+        let speedupFactor = 1;
+
+        speedupSlider.addEventListener('input', (e) => {
+            speedupFactor = parseFloat(e.target.value);
+            speedupValue.textContent = speedupFactor.toFixed(1);
+        });
+
+        setInterval(() => {
+            const timeElapsed = 0.05 * speedupFactor;
+
+            Object.entries(devices).forEach(([key, { device }]) => {
+                let pagesProcessed;
+                if (key === 'cpu') {
+                    pagesProcessed = timeElapsed / device.processPageCost();
+                } else {
+                    pagesProcessed = timeElapsed / device.readPagesCost(1);
+                }
+
+                components[key].progress = (components[key].progress + pagesProcessed) % 100;
+                components[key].pages += Math.floor((components[key].progress + pagesProcessed) / 100);
+
+                const indicator = document.getElementById(`${key}-indicator`);
+                const pagesElement = document.getElementById(`${key}-pages`);
+                
+                indicator.style.left = `calc(${components[key].progress}% - 20px)`;
+                pagesElement.textContent = components[key].pages.toLocaleString();
+            });
+        }, 50);
+    </script>
+</body>
+</html>
