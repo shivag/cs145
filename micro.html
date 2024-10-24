@@ -27,8 +27,14 @@
             <div class="col-span-1 space-y-3">
                 <!-- Example Tabs -->
                 <div class="flex space-x-1 border-b">
-                    <button onclick="loadExample('basic')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg active-tab" id="tab-basic">
-                        Basic
+                    <button onclick="loadExample('serial')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg active-tab" id="tab-serial">
+                        Serial 1
+                    </button>
+                    <button onclick="loadExample('inter1')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg active-tab" id="tab-inter1">
+                        Interleaved 1
+                    </button>
+                    <button onclick="loadExample('inter2')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg active-tab" id="tab-inter2">
+                        Interleaved 2
                     </button>
                     <button onclick="loadExample('deadlock2')" class="tab-btn px-3 py-2 text-sm hover:bg-gray-100 rounded-t-lg" id="tab-deadlock2">
                         Deadlock (2T)
@@ -90,7 +96,31 @@
 
     <script>
     const examples = {
-        basic: `T1,Req(A),1
+        serial: `T2,Req(A),1
+T2,Get(A),2
+T2,Rs(A),3
+T2,Re(A),8
+T2,Unl(A),9
+T1,Req(A),10
+T1,Get(A),11
+T1,Rs(A),12
+T1,Re(A),17
+T1,Ws(A),18
+T1,We(A),23
+T1,Unl(A),24
+T3,Req(B),25
+T3,Get(B),26
+T3,Rs(B),27
+T3,Re(B),32
+T3,Ws(B),33
+T3,We(B),38
+T3,Req(A),39
+T3,Get(A),40
+T3,Ws(A),41
+T3,We(A),46
+T3,Unl(B),47
+T3,Unl(A),48`,
+        inter1: `T1,Req(A),1
 T1,Get(A),2
 T1,Rs(A),3
 T3,Req(B),4
@@ -114,6 +144,30 @@ T2,Get(A),27
 T2,Rs(A),28
 T2,Re(A),33
 T2,Unl(A),34`,
+	inter2: `T3,Req(B),1
+T3,Get(B),2
+T3,Rs(B),3
+T2,Req(A),4
+T1,Req(A),5
+T3,Re(B),8
+T3,Ws(B),9
+T3,We(B),14
+T3,Req(A),15
+T3,Get(A),16
+T3,Ws(A),17
+T3,We(A),22
+T3,Unl(B),23
+T3,Unl(A),24
+T2,Get(A),24
+T2,Rs(A),25
+T2,Re(A),30
+T2,Unl(A),31
+T1,Get(A),31
+T1,Rs(A),32
+T1,Re(A),37
+T1,Ws(A),38
+T1,We(A),43
+T1,Unl(A),44`,
         deadlock2: `T1,Req(A),1
 T1,Get(A),2
 T1,Rs(A),3
@@ -141,7 +195,7 @@ T3,Req(A),9`
     let locks = {};
     let grantedLocks = {};  // To track the locks that have been acquired
     let requestedLocks = {}; // Track requested locks for WaitsFor graph
-    let speed = 1000;
+    let speed = 400;
 
     function setSpeed(newSpeed) {
         speed = parseInt(newSpeed);
@@ -250,7 +304,7 @@ T3,Req(A),9`
     }
 
     function detectDeadlock() {
-        const transactions = [...new Set(schedule.map(d => d.transaction))];
+        const transactions = [...new Set(schedule.map(d => d.transaction))].sort();
         const graph = {};
         transactions.forEach(t => graph[t] = new Set());
 
@@ -306,7 +360,7 @@ T3,Req(A),9`
             .append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        const transactions = [...new Set(schedule.map(d => d.transaction))];
+        const transactions = [...new Set(schedule.map(d => d.transaction))].sort();
 
         const x = d3.scaleLinear()
             .domain([0, maxTime])
@@ -339,10 +393,17 @@ T3,Req(A),9`
             .attr("class", "action")
             .attr("transform", d => `translate(${x(d.time)},${y(d.transaction)})`);
 
-        actions.append("rect")
-            .attr("width", 6)
-            .attr("height", y.bandwidth())
-            .attr("fill", d => colorScale(d.action.split('(')[0]));
+	actions.append("rect")
+    	  .attr("width", 6)
+    	  .attr("height", d => {
+        	const actionType = d.action.split('(')[0];
+        	if (actionType === 'Get') {
+            		return y.bandwidth() * 1.5;  // Make 'Get' 2x bigger
+        	} else {
+            		return y.bandwidth();  // Default height for other actions
+        	}
+    	  })
+          .attr("fill", d => colorScale(d.action.split('(')[0]));
 
         actions.append("text")
             .attr("x", 8)
@@ -473,7 +534,7 @@ T3,Req(A),9`
     }
 
     // Initialize simulation with first example
-    loadExample('basic');
+    loadExample('inter1');
     </script>
 </body>
 </html>
