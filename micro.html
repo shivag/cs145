@@ -21,6 +21,16 @@
 </head>
 <body class="bg-gray-100 p-4">
 <h2>MicroSchedule Simulation for <a href=http://cs145.stanford.edu>cs145.stanford.edu</a></h2>
+<div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-4 space-y-4">
+<p>
+Read Course Notes for details. Legend: 
+<ul>
+<li> Locking: <b>Req(X), Get(X), Unl(X)</b> for Request, Get, Unlock for X
+<li> Read/Writes: <b>Rs(X), Re(X)</b> fpr ReadStart and ReadEnd for X. Ws(X), We(X) for WriteStart and WriteEnd. 
+<li>Reads and Writes span a time period, due to IOlag. (Below we use IOlag=5 time units)
+</ul>
+	</div>
+
     <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-4 space-y-4">
         <div class="grid grid-cols-3 gap-4">
             <!-- Input and Controls -->
