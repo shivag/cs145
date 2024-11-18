@@ -161,13 +161,19 @@ function electLeader() {
         logEvent(`t=${clockTime}: Term ${currentTerm}: NO LEADER POSSIBLE`);
         logEvent(`t=${clockTime}: Active nodes (${activeNodes.length}) < Required quorum (${requiredQuorum})`);
         quorum = [];
-        activeNodes.forEach(n => n.state = "follower");
+        activeNodes.forEach(n => {
+            n.state = "follower";
+            n.term = currentTerm; // Update term even on failed election
+        });
         drawNodes();
         return;
     }
 
-    // Reset states of only active nodes
-    activeNodes.forEach(n => n.state = "follower");
+    // Reset states and terms of only active nodes
+    activeNodes.forEach(n => {
+        n.state = "follower";
+        n.term = currentTerm; // Update all active nodes to current term
+    });
     quorum = [];
 
     // Choose random candidate from active nodes
@@ -182,20 +188,20 @@ function electLeader() {
     activeNodes.forEach(node => {
         if (node.id !== candidate.id && Math.random() > 0.3) {
             quorum.push(node.id);
-            node.term = currentTerm; // Update term only for voting nodes
         }
     });
 
     logEvent(`t=${clockTime}: Votes received: ${quorum.join(", ")}`);
     
     if (quorum.length >= requiredQuorum) {
-        // Election successful - update terms only for nodes in quorum
-        quorum.forEach(nodeId => {
-            const node = nodes.find(n => n.id === nodeId);
-            node.term = currentTerm;
-        });
         candidate.state = "leader";
         logEvent(`t=${clockTime}: Node ${candidate.id} elected as leader (${quorum.length}/${activeNodes.length} votes)`);
+        
+        // After successful election, delay clearing quorum lines
+        setTimeout(() => {
+            quorum = [];
+            drawNodes();
+        }, 1000); // Clear after 1 second
     } else {
         // Election failed
         candidate.state = "follower";
@@ -206,18 +212,7 @@ function electLeader() {
     drawNodes();
 }
 
-function reset() {
-    stopClock();
-    clockTime = 0;
-    currentTerm = 0;
-    quorum = [];
-    setupNodes();
-    drawNodes();
-    logDiv.innerHTML = "";
-    startClock();
-}
-
-
+// Update fixPartition to handle terms correctly
 function fixPartition() {
     const partitionedNodes = nodes.filter(node => node.partitioned);
     if (partitionedNodes.length === 0) {
@@ -229,22 +224,29 @@ function fixPartition() {
     partitionedNodes.forEach(node => {
         const oldTimestamp = node.lastKnownTerm;
         node.partitioned = false;
-        node.term = currentTerm;
+        node.term = currentTerm; // Set to current term immediately
         logEvent(`Node ${node.id} rejoining -- Applying updates from Term=${oldTimestamp} to Term=${currentTerm}`);
     });
     
-    // If there's a current leader, add recovered nodes to quorum
+    // If there's a current leader, add recovered nodes to quorum temporarily
     const currentLeader = nodes.find(n => n.state === "leader" && n.active && !n.partitioned);
     if (currentLeader && quorum.length > 0) {
         partitionedNodes.forEach(node => {
             quorum.push(node.id);
         });
         logEvent(`Nodes ${partitionedNodes.map(n => n.id).join(', ')} joined quorum under leader ${currentLeader.id}`);
+        
+        // Clear quorum lines after a delay
+        setTimeout(() => {
+            quorum = [];
+            drawNodes();
+        }, 1000);
     }
     
     drawNodes();
 }
 
+// Update recoverNode to handle terms correctly
 function recoverNode(specificNodeId = null) {
     const deadNodes = nodes.filter(node => !node.active && !node.partitioned);
     if (deadNodes.length === 0) {
@@ -252,7 +254,6 @@ function recoverNode(specificNodeId = null) {
         return;
     }
 
-    // Create recovery options in the UI
     if (specificNodeId === null) {
         const recoveryOptions = document.getElementById('recoveryOptions');
         recoveryOptions.innerHTML = '';
@@ -266,26 +267,42 @@ function recoverNode(specificNodeId = null) {
         return;
     }
 
-    // Recover the specific node
     const nodeToRecover = nodes.find(n => n.id === specificNodeId);
     if (nodeToRecover) {
         const oldTimestamp = nodeToRecover.lastKnownTerm;
         nodeToRecover.active = true;
-        nodeToRecover.term = currentTerm;
+        nodeToRecover.term = currentTerm; // Set to current term immediately
         
-        logEvent(`Node ${nodeToRecover.id} recovering -- Applying updates from t=${oldTimestamp} to t=${currentTerm}`);
+        logEvent(`Node ${nodeToRecover.id} recovering -- Applying updates from T=${oldTimestamp} to T=${currentTerm}`);
         
-        // If there's a current leader, add recovered node to quorum
         const currentLeader = nodes.find(n => n.state === "leader" && n.active && !n.partitioned);
         if (currentLeader && quorum.length > 0) {
             quorum.push(nodeToRecover.id);
             logEvent(`Node ${nodeToRecover.id} joined quorum under leader ${currentLeader.id}`);
+            
+            // Clear quorum lines after a delay
+            setTimeout(() => {
+                quorum = [];
+                drawNodes();
+            }, 1000);
         }
         
         document.getElementById('recoveryOptions').style.display = 'none';
         drawNodes();
     }
 }
+
+function reset() {
+    stopClock();
+    clockTime = 0;
+    currentTerm = 0;
+    quorum = [];
+    setupNodes();
+    drawNodes();
+    logDiv.innerHTML = "";
+    startClock();
+}
+
 
 function simulateLeaderFailure() {
     const leader = nodes.find(node => node.state === "leader" && node.active);
